@@ -1,7 +1,15 @@
+"use client"
+
+import { use } from "react"
 import Link from "next/link"
 import { ChevronLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 
 // This would come from your database or API in a real app
 const subcategories = {
@@ -52,8 +60,19 @@ const subcategories = {
   // Other pillars would have their subcategories here
 }
 
-export default function PillarPage({ params }: { params: { pillar: string } }) {
-  const pillarId = params.pillar
+// Define active subcategories for each pillar
+const activeSubcategories: Record<string, string[]> = {
+  "physical-vitality": ["fitness", "sleep"],
+  // Add other pillars and their active subcategories here when ready
+}
+
+interface PageParams {
+  pillar: string;
+}
+
+export default function PillarPage({ params }: { params: Promise<PageParams> }) {
+  const resolvedParams = use(params);
+  const pillarId = resolvedParams.pillar;
 
   // Get pillar title based on ID
   const getPillarTitle = (id: string) => {
@@ -72,7 +91,7 @@ export default function PillarPage({ params }: { params: { pillar: string } }) {
 
   // Get subcategories for this pillar or use a default if not found
   const pillarSubcategories =
-    subcategories[pillarId as keyof typeof subcategories] || subcategories["physical-vitality"] // Default to physical vitality if pillar not found
+    subcategories[resolvedParams.pillar as keyof typeof subcategories] || subcategories["physical-vitality"] // Default to physical vitality if pillar not found
 
   return (
     <div className="min-h-screen bg-[#f8f5f2] text-[#2d3142] p-6">
@@ -83,15 +102,16 @@ export default function PillarPage({ params }: { params: { pillar: string } }) {
               <ChevronLeft className="h-6 w-6" />
             </Link>
           </Button>
-          <h1 className="text-3xl font-light">{getPillarTitle(pillarId)}</h1>
+          <h1 className="text-3xl font-light">{getPillarTitle(resolvedParams.pillar)}</h1>
         </div>
 
         <p className="text-lg text-[#2d3142]/80 mb-8">Select a specific area to focus on:</p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {pillarSubcategories.map((subcategory) => (
-            <Link key={subcategory.id} href={`/pillars/${pillarId}/${subcategory.id}`}>
-              <Card className="p-6 h-full cursor-pointer hover:shadow-md transition-shadow duration-300 border-none bg-white">
+          {pillarSubcategories.map((subcategory) => {
+            const isActive = activeSubcategories[resolvedParams.pillar]?.includes(subcategory.id) ?? false;
+            const SubcategoryCardContent = (
+              <Card className={`p-6 h-full transition-shadow duration-300 border-none bg-white ${isActive ? 'cursor-pointer hover:shadow-md' : 'cursor-not-allowed opacity-50'}`}>
                 <div className="flex flex-col h-full">
                   <div
                     className="h-2 w-16 rounded-full bg-gradient-to-r mb-4"
@@ -101,8 +121,25 @@ export default function PillarPage({ params }: { params: { pillar: string } }) {
                   <p className="text-[#2d3142]/80 text-sm">{subcategory.description}</p>
                 </div>
               </Card>
-            </Link>
-          ))}
+            );
+
+            return isActive ? (
+              <Link key={subcategory.id} href={`/pillars/${resolvedParams.pillar}/${subcategory.id}`}>
+                {SubcategoryCardContent}
+              </Link>
+            ) : (
+              <Popover key={subcategory.id}>
+                <PopoverTrigger asChild>
+                  <div className="block">
+                    {SubcategoryCardContent}
+                  </div>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto bg-[#e8ddd3] border-[#d1c3b6] text-[#2d3142] rounded-lg px-3 py-1.5 text-sm shadow-md">
+                  <p>Coming Soon.</p>
+                </PopoverContent>
+              </Popover>
+            );
+          })}
         </div>
       </div>
     </div>

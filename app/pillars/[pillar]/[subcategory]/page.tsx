@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, use } from "react"
 import Link from "next/link"
 import { ChevronLeft, ArrowRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -447,13 +447,21 @@ const questionnaireMap = {
   },
 }
 
-export default function QuestionnairePage({ params }: { params: { pillar: string; subcategory: string } }) {
+interface PageParams {
+  pillar: string;
+  subcategory: string;
+}
+
+export default function QuestionnairePage({ params }: { params: Promise<PageParams> }) {
+  // Use React.use to resolve the params promise
+  const resolvedParams = use(params);
+
   const [currentQuestion, setCurrentQuestion] = useState(0)
   const [answers, setAnswers] = useState<Record<number, string>>({})
   const [selectedOption, setSelectedOption] = useState<string | null>(null)
   const [isComplete, setIsComplete] = useState(false)
 
-  // Get title based on pillar and subcategory
+  // Get title based on pillar and subcategory using resolvedParams
   const getTitle = () => {
     const titles: Record<string, Record<string, string>> = {
       "physical-vitality": {
@@ -476,22 +484,19 @@ export default function QuestionnairePage({ params }: { params: { pillar: string
       },
     }
 
-    return titles[params.pillar]?.[params.subcategory] || "Wellness Assessment"
+    return titles[resolvedParams.pillar]?.[resolvedParams.subcategory] || "Wellness Assessment"
   }
 
-  // Get the appropriate questions based on pillar and subcategory
+  // Get the appropriate questions based on pillar and subcategory using resolvedParams
   const getQuestions = () => {
-    // Try to get specific questions for this pillar/subcategory
-    const pillarQuestions = questionnaireMap[params.pillar as keyof typeof questionnaireMap]
+    const pillarQuestions = questionnaireMap[resolvedParams.pillar as keyof typeof questionnaireMap]
     if (pillarQuestions) {
-      const subcategoryQuestions = pillarQuestions[params.subcategory as keyof typeof pillarQuestions]
+      const subcategoryQuestions = pillarQuestions[resolvedParams.subcategory as keyof typeof pillarQuestions]
       if (subcategoryQuestions) {
         return subcategoryQuestions
       }
     }
-
-    // Default to sleep questions if no specific questions are found
-    return sleepQuestions
+    return sleepQuestions // Default
   }
 
   const questions = getQuestions()
@@ -519,7 +524,7 @@ export default function QuestionnairePage({ params }: { params: { pillar: string
       <div className="max-w-2xl mx-auto">
         <div className="flex items-center mb-8">
           <Button variant="ghost" size="icon" asChild className="mr-2">
-            <Link href={`/pillars/${params.pillar}`}>
+            <Link href={`/pillars/${resolvedParams.pillar}`}>
               <ChevronLeft className="h-6 w-6" />
             </Link>
           </Button>
@@ -565,7 +570,7 @@ export default function QuestionnairePage({ params }: { params: { pillar: string
             </div>
           </>
         ) : (
-          <Link href={`/pillars/${params.pillar}/${params.subcategory}/results`}>
+          <Link href={`/pillars/${resolvedParams.pillar}/${resolvedParams.subcategory}/results`}>
             <Button className="bg-[#2d3142] hover:bg-[#2d3142]/90 text-white rounded-full px-6 py-5 w-full">
               View Your Personalized Recommendations
               <ArrowRight className="ml-2 h-5 w-5" />

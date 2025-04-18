@@ -1,7 +1,14 @@
+"use client"
+
 import Link from "next/link"
 import { ChevronLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 
 const wellnessPillars = [
   {
@@ -62,6 +69,8 @@ const wellnessPillars = [
   },
 ]
 
+const activePillars = ["physical-vitality"]; // IDs of pillars with questionnaires
+
 export default function PillarsPage() {
   return (
     <div className="min-h-screen bg-[#f8f5f2] text-[#2d3142] p-6">
@@ -76,9 +85,10 @@ export default function PillarsPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {wellnessPillars.map((pillar) => (
-            <Link key={pillar.id} href={`/pillars/${pillar.id}`}>
-              <Card className="p-6 h-full cursor-pointer hover:shadow-md transition-shadow duration-300 border-none bg-white">
+          {wellnessPillars.map((pillar) => {
+            const isActive = activePillars.includes(pillar.id);
+            const PillarCardContent = (
+              <Card className={`p-6 h-full transition-shadow duration-300 border-none bg-white ${isActive ? 'cursor-pointer hover:shadow-md' : 'cursor-not-allowed opacity-50'}`}>
                 <div className="flex flex-col h-full">
                   <div
                     className="h-3 w-24 rounded-full bg-gradient-to-r mb-4"
@@ -89,8 +99,25 @@ export default function PillarsPage() {
                   <p className="text-[#2d3142]/80 text-sm">{pillar.description}</p>
                 </div>
               </Card>
-            </Link>
-          ))}
+            );
+
+            return isActive ? (
+              <Link key={pillar.id} href={`/pillars/${pillar.id}`}>
+                {PillarCardContent}
+              </Link>
+            ) : (
+              <Popover key={pillar.id}>
+                <PopoverTrigger asChild>
+                  <div className="block">
+                    {PillarCardContent}
+                  </div>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto bg-[#e8ddd3] border-[#d1c3b6] text-[#2d3142] rounded-lg px-3 py-1.5 text-sm shadow-md">
+                  <p>Coming Soon.</p>
+                </PopoverContent>
+              </Popover>
+            );
+          })}
         </div>
       </div>
     </div>
