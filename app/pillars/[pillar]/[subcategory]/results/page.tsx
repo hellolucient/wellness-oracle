@@ -1,8 +1,20 @@
+"use client"
+
+import { useState, useEffect, use } from "react"
 import Link from "next/link"
 import { ChevronLeft, ExternalLink } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  Question,
+  QuestionOption,
+  sleepQuestions,
+  stressQuestions,
+  nutritionQuestions,
+  fitnessQuestions,
+  questionnaireMap,
+} from "@/lib/questionnaires/data"
 
 // Sample recommendations for sleep optimization
 const sleepRecommendations = [
@@ -221,9 +233,105 @@ const recommendationsMap = {
   },
 }
 
-export default function ResultsPage({ params }: { params: { pillar: string; subcategory: string } }) {
+interface PageParams {
+  pillar: string;
+  subcategory: string;
+}
+
+interface Answer {
+  questionId: number | string;
+  answerValue: string;
+  answerLabel: string;
+  questionText: string;
+}
+
+export default function ResultsPage({ params }: { params: Promise<PageParams> }) {
+  const resolvedParams = use(params);
+  const [answers, setAnswers] = useState<Record<string, string> | null>(null);
+  const [analysisData, setAnalysisData] = useState<Answer[]>([]);
+
+  // Fetch answers and prepare analysis data on mount
+  useEffect(() => {
+    const storedAnswers = localStorage.getItem('questionnaireAnswers');
+    if (storedAnswers) {
+      try {
+        const parsedAnswers: Record<string, string> = JSON.parse(storedAnswers);
+        setAnswers(parsedAnswers);
+
+        // Get the questions for this pillar/subcategory
+        const questions = getQuestions(resolvedParams.pillar, resolvedParams.subcategory);
+
+        // Map answers to include question text and chosen label
+        const detailedAnswers = Object.entries(parsedAnswers).map(([qId, answerValue]) => {
+          const question = questions.find((q: Question) => q.id.toString() === qId);
+          const option = question?.options.find((o: QuestionOption) => o.value === answerValue);
+          return {
+            questionId: qId,
+            answerValue: answerValue,
+            answerLabel: option?.label || 'Not found',
+            questionText: question?.question || 'Question not found',
+          };
+        });
+        setAnalysisData(detailedAnswers);
+
+        // Optional: Clean up localStorage
+        // localStorage.removeItem('questionnaireAnswers');
+      } catch (error) {
+        console.error("Failed to parse answers from localStorage:", error);
+        setAnswers({}); // Set to empty object to avoid errors
+        setAnalysisData([]);
+      }
+    } else {
+        setAnswers({}); // Set to empty object if no answers found
+        setAnalysisData([]);
+    }
+  }, [resolvedParams.pillar, resolvedParams.subcategory]); // Rerun if params change
+
+  // Replicate or import getQuestions logic
+  const getQuestions = (pillar: string, subcategory: string): Question[] => {
+    const pillarQuestions = questionnaireMap[pillar as keyof typeof questionnaireMap];
+    if (pillarQuestions) {
+      const subcategoryQuestions = pillarQuestions[subcategory as keyof typeof pillarQuestions];
+      if (subcategoryQuestions) {
+        return subcategoryQuestions;
+      }
+    }
+    // Return a default or handle error if questions not found
+    return sleepQuestions; // Defaulting to sleep as in questionnaire page
+  };
+
+  // Function to generate analysis text based on question and answer
+  const getAnalysisText = (pillarId: string, subcategoryId: string, questionId: string, answerValue: string): string => {
+    // --- Start Analysis Logic ---
+    if (pillarId === 'physical-vitality' && subcategoryId === 'fitness') {
+      if (questionId === '1') { // Q1: How many days per week do you engage in intentional physical activity?
+        if (answerValue === '0') {
+          return "Regular movement, even light activity, is crucial for overall health. Small steps like taking the stairs, a short walk, or parking further away can make a difference.";
+        } else if (answerValue === '1-2') {
+          // TODO: Add context-aware logic based on other answers
+          return "Engaging in activity 1-2 times a week is a good start! Let's look at the types of activity you enjoy to see how we can build on this.";
+        } else if (answerValue === '3-4') {
+          return "Great consistency! Exercising 3-4 days a week provides significant health benefits. Consider adding variety or exploring new activities to keep things interesting.";
+        } else if (answerValue === '5+') {
+          return "Excellent commitment! Being active 5 or more days a week is fantastic for your health. Ensure you're incorporating rest days and listening to your body.";
+        }
+      }
+      // Add analysis for other fitness questions here...
+       else if (questionId === '2') { // Q2: What types of physical activity?
+         // TODO: Add analysis based on answerValue ('none', 'light', 'moderate', 'intense')
+         return "Understanding the types of activity you enjoy helps tailor recommendations.";
+       }
+       // ... etc for fitness Q3-10
+    }
+    // Add analysis logic for other pillars/subcategories here...
+
+    // Default message if no specific analysis is found
+    return "Thanks for sharing! This information helps us understand your current habits.";
+    // --- End Analysis Logic ---
+  };
+
   // Get title based on pillar and subcategory
-  const getTitle = () => {
+  const getTitle = (pillar: string, subcategory: string) => {
     const titles: Record<string, Record<string, string>> = {
       "physical-vitality": {
         sleep: "Sleep Optimization",
@@ -245,15 +353,15 @@ export default function ResultsPage({ params }: { params: { pillar: string; subc
       },
     }
 
-    return titles[params.pillar]?.[params.subcategory] || "Wellness Assessment"
+    return titles[pillar]?.[subcategory] || "Wellness Assessment"
   }
 
   // Get the appropriate recommendations based on pillar and subcategory
-  const getRecommendations = () => {
+  const getRecommendations = (pillar: string, subcategory: string) => {
     // Try to get specific recommendations for this pillar/subcategory
-    const pillarRecommendations = recommendationsMap[params.pillar as keyof typeof recommendationsMap]
+    const pillarRecommendations = recommendationsMap[pillar as keyof typeof recommendationsMap]
     if (pillarRecommendations) {
-      const subcategoryRecommendations = pillarRecommendations[params.subcategory as keyof typeof pillarRecommendations]
+      const subcategoryRecommendations = pillarRecommendations[subcategory as keyof typeof pillarRecommendations]
       if (subcategoryRecommendations) {
         return subcategoryRecommendations
       }
@@ -263,14 +371,20 @@ export default function ResultsPage({ params }: { params: { pillar: string; subc
     return sleepRecommendations
   }
 
-  const recommendations = getRecommendations()
+  const recommendations = getRecommendations(resolvedParams.pillar, resolvedParams.subcategory)
+  const title = getTitle(resolvedParams.pillar, resolvedParams.subcategory)
+
+  if (answers === null) {
+    // Show loading state while fetching answers
+    return <div className="p-6">Loading assessment results...</div>;
+  }
 
   return (
     <div className="min-h-screen bg-[#f8f5f2] text-[#2d3142] p-6">
       <div className="max-w-3xl mx-auto">
         <div className="flex items-center mb-8">
           <Button variant="ghost" size="icon" asChild className="mr-2">
-            <Link href={`/pillars/${params.pillar}/${params.subcategory}`}>
+            <Link href={`/pillars/${resolvedParams.pillar}/${resolvedParams.subcategory}`}>
               <ChevronLeft className="h-6 w-6" />
             </Link>
           </Button>
@@ -279,9 +393,25 @@ export default function ResultsPage({ params }: { params: { pillar: string; subc
 
         <div className="mb-8">
           <p className="text-lg text-[#2d3142]/80">
-            Based on your {getTitle().toLowerCase()} assessment, we've curated these evidence-based recommendations to
-            help improve your wellness.
+            Let's take a look at your answers for the {title.toLowerCase()} assessment in detail so we can give you some useful suggestions for improvement...
           </p>
+        </div>
+
+        <div className="mb-12 space-y-6">
+          <h2 className="text-2xl font-light border-b pb-2">Your Assessment Analysis</h2>
+          {analysisData.length > 0 ? (
+            analysisData.map((item) => (
+              <Card key={item.questionId} className="p-6 border-none bg-white">
+                <h3 className="font-medium mb-2">{item.questionText}</h3>
+                <p className="text-[#2d3142]/70 mb-3 italic">Your answer: {item.answerLabel}</p>
+                <p className="text-sm">
+                  {getAnalysisText(resolvedParams.pillar, resolvedParams.subcategory, item.questionId.toString(), item.answerValue)}
+                </p>
+              </Card>
+            ))
+          ) : (
+             <p>Could not load analysis details.</p>
+          )}
         </div>
 
         <Tabs defaultValue="all" className="mb-8">
