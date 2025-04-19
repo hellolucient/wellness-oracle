@@ -88,8 +88,8 @@ export default function PillarsPage() {
   return (
     <div className="min-h-screen bg-[#f8f5f2] text-[#2d3142] p-6">
       <div className="max-w-6xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
+          <div className="flex items-center mb-4 md:mb-0">
             <Button variant="ghost" size="icon" asChild className="mr-2">
               <Link href="/">
                 <ChevronLeft className="h-6 w-6" />
@@ -98,7 +98,7 @@ export default function PillarsPage() {
             <h1 className="text-3xl font-light">Wellness Pillars</h1>
           </div>
 
-          <form onSubmit={handleSearchSubmit} className="flex items-center space-x-2 w-full max-w-md">
+          <form onSubmit={handleSearchSubmit} className="flex items-center space-x-2 w-full md:w-auto md:max-w-md">
             <Input
               type="text"
               placeholder="Search topics..."
@@ -106,7 +106,7 @@ export default function PillarsPage() {
               onChange={(e) => setSearchTerm(e.target.value)}
               className="flex-1 bg-white border-[#d1c3b6] focus:border-[#2d3142] rounded-full px-4 py-2 h-10"
             />
-            <Button type="submit" size="icon" className="bg-[#2d3142] hover:bg-[#2d3142]/90 text-white rounded-full h-10 w-10">
+            <Button type="submit" size="icon" className="bg-[#2d3142] hover:bg-[#2d3142]/90 text-white rounded-full h-10 w-10 flex-shrink-0">
               <Search className="h-5 w-5" />
             </Button>
           </form>
