@@ -1,9 +1,12 @@
 "use client"
 
+import { useState } from "react"
 import Link from "next/link"
-import { ChevronLeft } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { ChevronLeft, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import {
   Popover,
   PopoverContent,
@@ -72,19 +75,44 @@ const wellnessPillars = [
 const activePillars = ["physical-vitality"]; // IDs of pillars with questionnaires
 
 export default function PillarsPage() {
+  const router = useRouter();
+  const [searchTerm, setSearchTerm] = useState("");
+
+  const handleSearchSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (searchTerm.trim()) {
+      router.push(`/search-results?query=${encodeURIComponent(searchTerm.trim())}`);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#f8f5f2] text-[#2d3142] p-6">
       <div className="max-w-6xl mx-auto">
-        <div className="flex items-center mb-8">
-          <Button variant="ghost" size="icon" asChild className="mr-2">
-            <Link href="/">
-              <ChevronLeft className="h-6 w-6" />
-            </Link>
-          </Button>
-          <h1 className="text-3xl font-light">Select a Wellness Pillar</h1>
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center">
+            <Button variant="ghost" size="icon" asChild className="mr-2">
+              <Link href="/">
+                <ChevronLeft className="h-6 w-6" />
+              </Link>
+            </Button>
+            <h1 className="text-3xl font-light">Wellness Pillars</h1>
+          </div>
+
+          <form onSubmit={handleSearchSubmit} className="flex items-center space-x-2 w-full max-w-md">
+            <Input
+              type="text"
+              placeholder="Search topics..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="flex-1 bg-white border-[#d1c3b6] focus:border-[#2d3142] rounded-full px-4 py-2 h-10"
+            />
+            <Button type="submit" size="icon" className="bg-[#2d3142] hover:bg-[#2d3142]/90 text-white rounded-full h-10 w-10">
+              <Search className="h-5 w-5" />
+            </Button>
+          </form>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {wellnessPillars.map((pillar) => {
             const isActive = activePillars.includes(pillar.id);
             const PillarCardContent = (
