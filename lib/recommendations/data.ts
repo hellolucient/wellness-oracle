@@ -1,10 +1,11 @@
 // Define interfaces for better type safety
 export interface Recommendation {
-  type: "product" | "service" | "experience";
+  type: "product" | "service" | "experience" | "habit";
   title: string;
   description: string;
   link: string;
   science: string;
+  potential_link_category?: string;
 }
 
 // Sample recommendations for sleep optimization

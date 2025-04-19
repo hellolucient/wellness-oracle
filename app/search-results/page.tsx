@@ -7,14 +7,11 @@ import { ChevronLeft, ExternalLink } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Recommendation, allRecommendations } from "@/lib/recommendations/data"
+import { Recommendation as ImportedRecommendation, allRecommendations } from "@/lib/recommendations/data"
 
-// Re-use the RecommendationCard component (assuming it's either defined here or imported)
-// If RecommendationCard is defined in results/page.tsx, we should move it to its own file
-// e.g., components/recommendation-card.tsx and import it here and in results/page.tsx
-// For now, let's copy its definition here:
+// Ensure RecommendationProps uses the explicitly imported type
 interface RecommendationProps {
-  recommendation: Recommendation
+  recommendation: ImportedRecommendation;
 }
 
 function RecommendationCard({ recommendation }: RecommendationProps) {
@@ -28,16 +25,18 @@ function RecommendationCard({ recommendation }: RecommendationProps) {
             </div>
             <h2 className="text-xl font-light">{recommendation.title}</h2>
           </div>
-          <Button variant="outline" size="icon" asChild className="rounded-full">
-            <Link href={recommendation.link} target="_blank"> {/* Added target blank */}
-              <ExternalLink className="h-4 w-4" />
-            </Link>
-          </Button>
+          {recommendation.link && (
+            <Button variant="outline" size="icon" asChild className="rounded-full ml-4 flex-shrink-0">
+              <Link href={recommendation.link} target="_blank">
+                <ExternalLink className="h-4 w-4" />
+              </Link>
+            </Button>
+          )}
         </div>
         <p className="text-[#2d3142]/80 mb-4">{recommendation.description}</p>
         <div className="bg-[#f8f5f2] p-4 rounded-md">
-          <h3 className="text-sm font-medium mb-2">The Science Behind It</h3>
-          <p className="text-sm text-[#2d3142]/80">{recommendation.science}</p>
+          <h3 className="text-sm font-medium mb-2">The Research Behind It</h3>
+          <p className="text-sm text-[#2d3142]/80">{recommendation.research}</p>
         </div>
       </div>
     </Card>
@@ -48,7 +47,7 @@ function RecommendationCard({ recommendation }: RecommendationProps) {
 function SearchResultsContent() {
   const searchParams = useSearchParams();
   const query = searchParams.get('query') || "";
-  const [filteredRecommendations, setFilteredRecommendations] = useState<Recommendation[]>([]);
+  const [filteredRecommendations, setFilteredRecommendations] = useState<ImportedRecommendation[]>([]);
 
   useEffect(() => {
     if (query) {

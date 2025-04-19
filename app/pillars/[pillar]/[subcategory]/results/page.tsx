@@ -2,7 +2,7 @@
 
 import { useState, useEffect, use } from "react"
 import Link from "next/link"
-import { ChevronLeft, ExternalLink } from "lucide-react"
+import { ChevronLeft, ExternalLink, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -10,15 +10,12 @@ import {
   Question,
   QuestionOption,
   sleepQuestions,
-  stressQuestions,
-  nutritionQuestions,
-  fitnessQuestions,
   questionnaireMap,
 } from "@/lib/questionnaires/data"
 import {
-  Recommendation,
-  recommendationsMap,
+  Recommendation as ImportedRecommendation,
   sleepRecommendations,
+  recommendationsMap,
 } from "@/lib/recommendations/data"
 
 interface PageParams {
@@ -26,56 +23,18 @@ interface PageParams {
   subcategory: string;
 }
 
-interface Answer {
-  questionId: number | string;
-  answerValue: string;
-  answerLabel: string;
-  questionText: string;
+interface AnalysisItem {
+  questionId: string;
+  feedback: string;
 }
 
 export default function ResultsPage({ params }: { params: Promise<PageParams> }) {
   const resolvedParams = use(params);
-  const [answers, setAnswers] = useState<Record<string, string> | null>(null);
-  const [analysisData, setAnalysisData] = useState<Answer[]>([]);
+  const [analysisData, setAnalysisData] = useState<AnalysisItem[]>([]);
+  const [recommendations, setRecommendations] = useState<ImportedRecommendation[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Fetch answers and prepare analysis data on mount
-  useEffect(() => {
-    const storedAnswers = localStorage.getItem('questionnaireAnswers');
-    if (storedAnswers) {
-      try {
-        const parsedAnswers: Record<string, string> = JSON.parse(storedAnswers);
-        setAnswers(parsedAnswers);
-
-        // Get the questions for this pillar/subcategory
-        const questions = getQuestions(resolvedParams.pillar, resolvedParams.subcategory);
-
-        // Map answers to include question text and chosen label
-        const detailedAnswers = Object.entries(parsedAnswers).map(([qId, answerValue]) => {
-          const question = questions.find((q: Question) => q.id.toString() === qId);
-          const option = question?.options.find((o: QuestionOption) => o.value === answerValue);
-          return {
-            questionId: qId,
-            answerValue: answerValue,
-            answerLabel: option?.label || 'Not found',
-            questionText: question?.question || 'Question not found',
-          };
-        });
-        setAnalysisData(detailedAnswers);
-
-        // Optional: Clean up localStorage
-        // localStorage.removeItem('questionnaireAnswers');
-      } catch (error) {
-        console.error("Failed to parse answers from localStorage:", error);
-        setAnswers({}); // Set to empty object to avoid errors
-        setAnalysisData([]);
-      }
-    } else {
-        setAnswers({}); // Set to empty object if no answers found
-        setAnalysisData([]);
-    }
-  }, [resolvedParams.pillar, resolvedParams.subcategory]); // Rerun if params change
-
-  // Replicate or import getQuestions logic
   const getQuestions = (pillar: string, subcategory: string): Question[] => {
     const pillarQuestions = questionnaireMap[pillar as keyof typeof questionnaireMap];
     if (pillarQuestions) {
@@ -84,41 +43,66 @@ export default function ResultsPage({ params }: { params: Promise<PageParams> })
         return subcategoryQuestions;
       }
     }
-    // Return a default or handle error if questions not found
-    return sleepQuestions; // Defaulting to sleep as in questionnaire page
+    return sleepQuestions;
   };
+  const questions = getQuestions(resolvedParams.pillar, resolvedParams.subcategory);
 
-  // Function to generate analysis text based on question and answer
-  const getAnalysisText = (pillarId: string, subcategoryId: string, questionId: string, answerValue: string): string => {
-    // --- Start Analysis Logic ---
-    if (pillarId === 'physical-vitality' && subcategoryId === 'fitness') {
-      if (questionId === '1') { // Q1: How many days per week do you engage in intentional physical activity?
-        if (answerValue === '0') {
-          return "Regular movement, even light activity, is crucial for overall health. Small steps like taking the stairs, a short walk, or parking further away can make a difference.";
-        } else if (answerValue === '1-2') {
-          // TODO: Add context-aware logic based on other answers
-          return "Engaging in activity 1-2 times a week is a good start! Let's look at the types of activity you enjoy to see how we can build on this.";
-        } else if (answerValue === '3-4') {
-          return "Great consistency! Exercising 3-4 days a week provides significant health benefits. Consider adding variety or exploring new activities to keep things interesting.";
-        } else if (answerValue === '5+') {
-          return "Excellent commitment! Being active 5 or more days a week is fantastic for your health. Ensure you're incorporating rest days and listening to your body.";
-        }
+  useEffect(() => {
+    const fetchAnalysis = async () => {
+      setIsLoading(true);
+      setError(null);
+      const storedAnswers = localStorage.getItem('questionnaireAnswers');
+
+      if (!storedAnswers) {
+        setError("No answers found. Please complete the questionnaire first.");
+        setIsLoading(false);
+        setAnalysisData([]);
+        setRecommendations([]);
+        return;
       }
-      // Add analysis for other fitness questions here...
-       else if (questionId === '2') { // Q2: What types of physical activity?
-         // TODO: Add analysis based on answerValue ('none', 'light', 'moderate', 'intense')
-         return "Understanding the types of activity you enjoy helps tailor recommendations.";
-       }
-       // ... etc for fitness Q3-10
-    }
-    // Add analysis logic for other pillars/subcategories here...
 
-    // Default message if no specific analysis is found
-    return "Thanks for sharing! This information helps us understand your current habits.";
-    // --- End Analysis Logic ---
-  };
+      try {
+        const parsedAnswers = JSON.parse(storedAnswers);
 
-  // Get title based on pillar and subcategory
+        const response = await fetch('/api/analyze', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            answers: parsedAnswers,
+            pillar: resolvedParams.pillar,
+            subcategory: resolvedParams.subcategory,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.details || `API request failed with status ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (!data.analysis || !Array.isArray(data.analysis) || !data.recommendations || !Array.isArray(data.recommendations)) {
+           throw new Error('Invalid data structure received from API.');
+        }
+
+        setAnalysisData(data.analysis);
+        setRecommendations(data.recommendations);
+
+      } catch (err: any) {
+        console.error("Failed to fetch analysis:", err);
+        setError(err.message || "An error occurred while fetching results.");
+        setAnalysisData([]);
+        setRecommendations(sleepRecommendations);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchAnalysis();
+  }, [resolvedParams.pillar, resolvedParams.subcategory]);
+
   const getTitle = (pillar: string, subcategory: string) => {
     const titles: Record<string, Record<string, string>> = {
       "physical-vitality": {
@@ -140,29 +124,23 @@ export default function ResultsPage({ params }: { params: Promise<PageParams> })
         supplements: "Supplements & Nutrients",
       },
     }
-
     return titles[pillar]?.[subcategory] || "Wellness Assessment"
   }
-
-  // Define getRecommendations using the imported map
-  const getRecommendations = (pillar: string, subcategory: string): Recommendation[] => {
-    const pillarRecommendations = recommendationsMap[pillar as keyof typeof recommendationsMap]
-    if (pillarRecommendations) {
-      const subcategoryRecommendations = pillarRecommendations[subcategory as keyof typeof pillarRecommendations]
-      if (subcategoryRecommendations) {
-        return subcategoryRecommendations
-      }
-    }
-    return sleepRecommendations; // Default
-  }
-
-  const recommendations = getRecommendations(resolvedParams.pillar, resolvedParams.subcategory)
   const title = getTitle(resolvedParams.pillar, resolvedParams.subcategory)
 
-  if (answers === null) {
-    // Show loading state while fetching answers
-    return <div className="p-6">Loading assessment results...</div>;
-  }
+  const combinedAnalysisData = analysisData.map(analysisItem => {
+      const question = questions.find(q => q.id.toString() === analysisItem.questionId);
+      const storedAnswers = typeof window !== 'undefined' ? localStorage.getItem('questionnaireAnswers') : null;
+      const parsedAnswers = storedAnswers ? JSON.parse(storedAnswers) : {};
+      const answerValue = parsedAnswers[analysisItem.questionId];
+      const option = question?.options.find(o => o.value === answerValue);
+
+      return {
+          ...analysisItem,
+          questionText: question?.question || 'Question not found',
+          answerLabel: option?.label || answerValue || 'Not answered',
+      };
+  });
 
   return (
     <div className="min-h-screen bg-[#f8f5f2] text-[#2d3142] p-6">
@@ -176,88 +154,132 @@ export default function ResultsPage({ params }: { params: Promise<PageParams> })
           <h1 className="text-3xl font-light">Your Personalized Recommendations</h1>
         </div>
 
-        <div className="mb-8">
-          <p className="text-lg text-[#2d3142]/80">
-            Let's take a look at your answers for the {title.toLowerCase()} assessment in detail so we can give you some useful suggestions for improvement...
-          </p>
-        </div>
+        {isLoading && (
+          <div className="flex justify-center items-center py-20">
+            <Loader2 className="h-12 w-12 animate-spin text-[#2d3142]/50" />
+            <p className="ml-4 text-lg">Generating your personalized analysis...</p>
+          </div>
+        )}
 
-        <div className="mb-12 space-y-6">
-          <h2 className="text-2xl font-light border-b pb-2">Your Assessment Analysis</h2>
-          {analysisData.length > 0 ? (
-            analysisData.map((item) => (
-              <Card key={item.questionId} className="p-6 border-none bg-white">
-                <h3 className="font-medium mb-2">{item.questionText}</h3>
-                <p className="text-[#2d3142]/70 mb-3 italic">Your answer: {item.answerLabel}</p>
-                <p className="text-sm">
-                  {getAnalysisText(resolvedParams.pillar, resolvedParams.subcategory, item.questionId.toString(), item.answerValue)}
-                </p>
-              </Card>
-            ))
-          ) : (
-             <p>Could not load analysis details.</p>
-          )}
-        </div>
+        {error && !isLoading && (
+          <Card className="p-6 border-red-500 bg-red-50 text-red-700 mb-8">
+            <h2 className="text-xl font-semibold mb-2">Error</h2>
+            <p>{error}</p>
+            <Button asChild variant="link" className="text-red-700 px-0">
+                 <Link href={`/pillars/${resolvedParams.pillar}/${resolvedParams.subcategory}`}>Try Questionnaire Again</Link>
+            </Button>
+          </Card>
+        )}
 
-        <Tabs defaultValue="all" className="mb-8">
-          <TabsList className="bg-[#e8ddd3]/50">
-            <TabsTrigger value="all">All</TabsTrigger>
-            <TabsTrigger value="products">Products</TabsTrigger>
-            <TabsTrigger value="services">Services</TabsTrigger>
-            <TabsTrigger value="experiences">Experiences</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="all" className="mt-6">
-            <div className="space-y-6">
-              {recommendations.map((rec, index) => (
-                <RecommendationCard key={index} recommendation={rec} />
-              ))}
+        {!isLoading && !error && (
+          <>
+            <div className="mb-8">
+              <p className="text-lg text-[#2d3142]/80">
+                Let's take a look at your answers for the {title.toLowerCase()} assessment in detail so we can give you some useful suggestions for improvement...
+              </p>
             </div>
-          </TabsContent>
 
-          <TabsContent value="products" className="mt-6">
-            <div className="space-y-6">
-              {recommendations
-                .filter((rec) => rec.type === "product")
-                .map((rec, index) => (
-                  <RecommendationCard key={index} recommendation={rec} />
-                ))}
+            <div className="mb-12 space-y-6">
+              <h2 className="text-2xl font-light border-b pb-2">Your Assessment Analysis</h2>
+              {combinedAnalysisData.length > 0 ? (
+                combinedAnalysisData.map((item) => (
+                  <Card key={item.questionId} className="p-6 border-none bg-white">
+                    <h3 className="font-medium mb-2">{item.questionText}</h3>
+                    <p className="text-[#2d3142]/70 mb-3 italic">Your answer: {item.answerLabel}</p>
+                    <p className="text-sm">{item.feedback}</p>
+                  </Card>
+                ))
+              ) : (
+                 <p>Could not load analysis details.</p>
+              )}
             </div>
-          </TabsContent>
 
-          <TabsContent value="services" className="mt-6">
-            <div className="space-y-6">
-              {recommendations
-                .filter((rec) => rec.type === "service")
-                .map((rec, index) => (
-                  <RecommendationCard key={index} recommendation={rec} />
-                ))}
+            <div className="mb-8">
+              <h2 className="text-2xl font-light border-b pb-2 mb-6">Recommendations</h2>
+              {recommendations.length > 0 ? (
+                <Tabs defaultValue="all">
+                   <TabsList className="bg-[#e8ddd3]/50">
+                     <TabsTrigger value="all">All ({recommendations.length})</TabsTrigger>
+                     <TabsTrigger value="products">
+                       Products ({recommendations.filter(r => r.type === 'product').length})
+                     </TabsTrigger>
+                     <TabsTrigger value="services">
+                       Services ({recommendations.filter(r => r.type === 'service').length})
+                     </TabsTrigger>
+                     <TabsTrigger value="experiences">
+                       Experiences ({recommendations.filter(r => r.type === 'experience').length})
+                     </TabsTrigger>
+                     {recommendations.some(r => r.type === 'habit') && (
+                         <TabsTrigger value="habits">
+                           Habits ({recommendations.filter(r => r.type === 'habit').length})
+                         </TabsTrigger>
+                      )}
+                   </TabsList>
+                  <TabsContent value="all" className="mt-6">
+                    <div className="space-y-6">
+                      {recommendations.map((rec, index) => (
+                        <RecommendationCard key={`all-${index}`} recommendation={rec} />
+                      ))}
+                    </div>
+                  </TabsContent>
+                  <TabsContent value="products" className="mt-6">
+                    <div className="space-y-6">
+                      {recommendations
+                        .filter((rec) => rec.type === "product")
+                        .map((rec, index) => (
+                          <RecommendationCard key={`product-${index}`} recommendation={rec} />
+                        ))}
+                    </div>
+                  </TabsContent>
+                  <TabsContent value="services" className="mt-6">
+                    <div className="space-y-6">
+                      {recommendations
+                        .filter((rec) => rec.type === "service")
+                        .map((rec, index) => (
+                          <RecommendationCard key={`service-${index}`} recommendation={rec} />
+                        ))}
+                    </div>
+                  </TabsContent>
+                  <TabsContent value="experiences" className="mt-6">
+                    <div className="space-y-6">
+                      {recommendations
+                        .filter((rec) => rec.type === "experience")
+                        .map((rec, index) => (
+                          <RecommendationCard key={`experience-${index}`} recommendation={rec} />
+                        ))}
+                    </div>
+                  </TabsContent>
+                  {recommendations.some(r => r.type === 'habit') && (
+                     <TabsContent value="habits" className="mt-6">
+                       <div className="space-y-6">
+                         {recommendations
+                           .filter((rec) => rec.type === "habit")
+                           .map((rec, index) => (
+                             <RecommendationCard key={`habit-${index}`} recommendation={rec} />
+                           ))}
+                       </div>
+                     </TabsContent>
+                  )}
+                </Tabs>
+              ) : (
+                <p>No recommendations available at this time.</p>
+              )}
             </div>
-          </TabsContent>
 
-          <TabsContent value="experiences" className="mt-6">
-            <div className="space-y-6">
-              {recommendations
-                .filter((rec) => rec.type === "experience")
-                .map((rec, index) => (
-                  <RecommendationCard key={index} recommendation={rec} />
-                ))}
+            <div className="text-center mt-12">
+              <Button asChild className="bg-[#2d3142] hover:bg-[#2d3142]/90 text-white rounded-full px-8 py-6">
+                <Link href="/pillars">Explore Another Wellness Area</Link>
+              </Button>
             </div>
-          </TabsContent>
-        </Tabs>
-
-        <div className="text-center mt-12">
-          <Button asChild className="bg-[#2d3142] hover:bg-[#2d3142]/90 text-white rounded-full px-8 py-6">
-            <Link href="/pillars">Explore Another Wellness Area</Link>
-          </Button>
-        </div>
+          </>
+        )}
       </div>
     </div>
   )
 }
 
 interface RecommendationProps {
-  recommendation: Recommendation
+  recommendation: ImportedRecommendation
 }
 
 function RecommendationCard({ recommendation }: RecommendationProps) {
@@ -271,18 +293,20 @@ function RecommendationCard({ recommendation }: RecommendationProps) {
             </div>
             <h2 className="text-xl font-light">{recommendation.title}</h2>
           </div>
-          <Button variant="outline" size="icon" asChild className="rounded-full">
-            <Link href={recommendation.link}>
-              <ExternalLink className="h-4 w-4" />
-            </Link>
-          </Button>
+          {recommendation.link && (
+            <Button variant="outline" size="icon" asChild className="rounded-full ml-4 flex-shrink-0">
+              <Link href={recommendation.link} target="_blank">
+                <ExternalLink className="h-4 w-4" />
+              </Link>
+            </Button>
+          )}
         </div>
 
         <p className="text-[#2d3142]/80 mb-4">{recommendation.description}</p>
 
         <div className="bg-[#f8f5f2] p-4 rounded-md">
-          <h3 className="text-sm font-medium mb-2">The Science Behind It</h3>
-          <p className="text-sm text-[#2d3142]/80">{recommendation.science}</p>
+          <h3 className="text-sm font-medium mb-2">The Research Behind It</h3>
+          <p className="text-sm text-[#2d3142]/80">{recommendation.research}</p>
         </div>
       </div>
     </Card>
